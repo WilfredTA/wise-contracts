@@ -1,0 +1,22 @@
+load "dmaps"
+load "nat-less"
+module EthereumTypes {
+    datatype Address := (addr val:Ide)
+    datatype PrivKey := (privkey val:Ide)
+    datatype Pubkey := (pubkey val:Ide)
+    datatype Keypair := (keypair priv:PrivKey pub:Pubkey)
+    datatype Signature := (sig val:Ide)
+
+    declare sign: (D) [PrivKey D] -> Signature
+    declare verify: (D) [Pubkey Signature] -> Boolean
+
+    datatype (KeyVal K V) := (keyval key:K val:V)
+    datatype (Mapping K V) := (map val:(List (KeyVal K V)))
+    datatype Env := (
+        env blocknum:N sender:Address
+    )
+    datatype (EncodedData D) := (encoded val:D)
+    datatype (ContractCall F) := (contract-call func:F env:Env) 
+    define [a a1 a2 e e1 e2 s s1 s2] := [?a:Address ?a1:Address ?a2:Address ?e:Env ?e1:Env ?e2:Env ?s:Signature ?s1:Signature ?s2:Signature]
+
+}

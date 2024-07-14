@@ -1,0 +1,111 @@
+load "../EthereumTypes"
+
+define [remove update at empty-map <= + - <] := [DMap.remove DMap.update DMap.at DMap.empty-map N.<= N.+ N.- N.<]
+
+module Erc20 {
+    open EthereumTypes
+    define-sort Balances := (DMap.DMap Address N)
+    datatype ContractState := (state balances:Balances err:Boolean)
+    define [cs cs1 cs2 b b1 b2] := [?cs:ContractState ?cs1:ContractState ?cs2:ContractState ?b:Balances ?b1:Balances ?b2:Balances]
+    declare Deployer: Address
+    assert (Deployer = (addr 'deployer))
+    declare InitState: ContractState
+
+    define addr-balance := lambda (address balance )
+        [(addr address) (int->nat balance)]
+    assert (InitState = (state (update (pair (addr 'deployer) (int->nat 5)) (empty-map zero)) false))
+
+    datatype Function := (transfer orig:Address to:Address amount:N) | (burn orig:Address amt:N)
+    define [f f1 f2] := [?f:Function ?f1:Function ?f2:Function]
+    datatype FunctionCall := (call func:Function env:Env)
+    define [fc fc1 fc2] := [?fc:FunctionCall ?fc1:FunctionCall ?fc2:FunctionCall]
+    declare Step: [ContractState FunctionCall] -> ContractState
+    #datatype Transition: (->> (Pair ContractState FunctionCall) ContractState)
+    
+
+    declare has-balance: [ContractState Address N] -> Boolean
+    declare transfer-balance: [ContractState Address Address N] -> ContractState
+    declare balance-of: [ContractState Address] -> N
+
+    assert* has-balance-def := ((has-balance cs a x) <==> ~ (((balances cs) at a) < x))
+    assert* balance-of-def := ((balance-of cs a) = ((balances cs) at a))
+
+   
+    
+    
+    declare modify-balance: [Balances Address N] -> Balances
+    declare increase-balance: [ContractState Address N] -> ContractState
+    declare decrease-balance: [ContractState Address N] -> ContractState
+    assert* increase-balance-def := (
+        (increase-balance cs a x) = (state (modify-balance (balances cs) a (x + (balance-of cs a))) (err cs))
+    )
+
+    assert* decrease-balance-def := (
+        (decrease-balance cs a x) = (state (modify-balance (balances cs) a (x - (balance-of cs a))) (err cs))
+    )
+    assert* modify-balance-def := 
+        ((modify-balance b a x) =  (update (pair a x) (remove b a)))
+    
+    assert* transfer-balance-def := [
+        ((has-balance cs a x) ==> (transfer-balance cs a a1 x) = (increase-balance (decrease-balance cs a x) a1 x))
+        (~ (has-balance cs a x) ==> (transfer-balance cs a a1 x) = (state (balances cs) true))
+    ]
+
+}
+
+extend-module Erc20 {
+     module TestUtils {
+        define modify-key-val-in-map := lambda (key val map)
+                match map {
+                    (empty-map _) => map 
+                    | (update (binding as (pair k v)) rest) => check {
+                        (equal? k key) => (update (pair k val) rest) 
+                        | else => (update binding (modify-key-val-in-map key val rest))
+                    } 
+                }
+            define add-to-balance := lambda (key val contract_state) 
+                let {
+                    prv_bal := (eval ((balances contract_state) at key))  
+                
+                }
+                (state (modify-key-val-in-map key ((int->nat val) + (int->nat prv_bal)) (eval (balances contract_state))) (eval (err contract_state)))  
+
+           
+
+            define prettify-balances := lambda (balances)
+            match balances {
+                (empty-map x) => (empty-map 0)
+                | (update (binding as (pair k v)) rest) => (update (pair k (nat->int v)) (prettify-balances rest)) 
+            }
+
+            define prettify-balances-2 := lambda (balances)
+                let {
+                    res := (prettify-balances balances)
+                }
+                (DMap.dmap->alist res)
+
+            define mk-add-to-balance-fn := lambda (key val contract_state)
+                lambda () (add-to-balance key val contract_state)
+
+          
+
+            define test-fn := lambda (func)
+                let {
+                    res := (func )
+                }
+                [(DMap.dmap->alist (prettify-balances (eval (balances res)))) (eval (err res))]
+    }
+   
+    module Tests {
+        open TestUtils
+        (eval (balances InitState))
+        (modify-key-val-in-map (addr 'deployer) (int->nat 3) (eval (balances InitState)))
+        (add-to-balance (addr 'deployer) (int->nat 3) InitState)
+        (eval (has-balance InitState (addr 'deployer) (int->nat 3)))
+        (eval (has-balance InitState (addr 'deployer) (int->nat 6)))
+        (test-fn (mk-add-to-balance-fn (addr 'deployer) (int->nat 3) InitState) )
+        (prettify-balances-2 (eval (modify-balance  (eval (balances InitState)) (addr 'deployer) (int->nat 7))))  
+    }
+  
+    
+}
